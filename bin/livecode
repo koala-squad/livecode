@@ -1,0 +1,53 @@
+#!/usr/bin/env node
+
+const program = require('commander');
+const prompt = require('prompt');
+const opn = require('opn');
+const path = require('path');
+const chalk = require('chalk');
+
+const debug = require('../lib/debug');
+const watcher = require('../lib/watcher');
+const bucket = require('../lib/bucket');
+const pjson = require('../package.json');
+
+const cwd = path.basename(process.cwd());
+
+program.version(pjson.version)
+  .option('-n, --name [name]',
+    'Specify project name (default: directory name)', cwd)
+  .option('-e, --exclude [glob]',
+    'Specify an array of globs to exclude matches', eval, [])
+  .parse(process.argv);
+
+debug.banner();
+
+opn('http://localhost:3000');
+
+prompt.start();
+prompt.message = '';
+prompt.get([{
+  name: 'idToken',
+  description: chalk.yellow('Id Token')
+}], (err, result) => {
+  let name = program.name;
+  let exclude = program.exclude;
+  let idToken = result.idToken;
+
+  debug.clear();
+  init({ name, exclude, idToken });
+});
+
+function init(options) {
+  let source = watcher.watch(options);
+  debug.log('Start watching ...');
+
+  bucket.init(options).then(() => {
+    source.subscribe((file) => {
+      debug.update('File changed', file.path);
+      bucket.update(file).then(() => {
+        debug.complete('File uploaded', file.path);
+      });
+    }, debug.error);
+  }).catch(debug.error);
+}
